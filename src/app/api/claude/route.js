@@ -1,6 +1,8 @@
 // app/api/claude/route.js
+const CLAUDE_KEY = process.env.CLAUDE_API_KEY;
+
 export async function POST(request) {
-  const { content, instruction, claudeKey } = await request.json();
+  const { content, instruction } = await request.json();
 
   const systemPrompt = `Eres un asistente de escritura creativa. El usuario te dará el contenido actual de su libro en formato Markdown y una instrucción de edición.
 
@@ -17,7 +19,7 @@ Reglas:
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'x-api-key': claudeKey,
+        'x-api-key': CLAUDE_KEY,
         'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },

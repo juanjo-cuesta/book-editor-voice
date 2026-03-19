@@ -15,7 +15,13 @@ function saveConfig(data) {
 }
 
 export default function BookEditor() {
-  const [config, setConfig] = useState({ githubToken: '', claudeKey: '', repo: '', filePath: '' });
+  const [filePath, setFilePath] = useState(() => {
+    try {
+      return typeof window !== 'undefined'
+        ? localStorage.getItem('book_editor_path') || 'libro.md'
+        : 'libro.md';
+    } catch { return 'libro.md'; }
+  });
   const [content, setContent] = useState('');
   const [instruction, setInstruction] = useState('');
   const [status, setStatus] = useState('');
@@ -27,27 +33,14 @@ export default function BookEditor() {
   const recognitionRef = useRef(null);
 
   useEffect(() => {
-    const saved = loadConfig();
-    if (saved.githubToken) setConfig(saved);
-  }, []);
-
-  const updateConfig = (key, val) => {
-    const next = { ...config, [key]: val };
-    setConfig(next);
-    saveConfig(next);
-  };
+    try { localStorage.setItem('book_editor_path', filePath); } catch {}
+  }, [filePath]);
 
   const fetchFile = async () => {
-    if (!config.githubToken || !config.repo || !config.filePath) {
-      setStatus('⚠️ Configura GitHub token, repo y ruta del archivo');
-      return;
-    }
     setLoading(true);
     setStatus('Cargando archivo de GitHub...');
     try {
-      const res = await fetch(`/api/github?repo=${encodeURIComponent(config.repo)}&path=${encodeURIComponent(config.filePath)}`, {
-        headers: { 'x-github-token': config.githubToken }
-      });
+      const res = await fetch(`/api/github?path=${encodeURIComponent(filePath)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setContent(data.content);
@@ -61,14 +54,13 @@ export default function BookEditor() {
 
   const applyInstruction = async () => {
     if (!instruction.trim()) return;
-    if (!config.claudeKey) { setStatus('⚠️ Añade tu Claude API key en configuración'); return; }
     setLoading(true);
     setStatus('Claude editando...');
     try {
       const res = await fetch('/api/claude', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, instruction, claudeKey: config.claudeKey })
+        body: JSON.stringify({ content, instruction })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -89,11 +81,9 @@ export default function BookEditor() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          repo: config.repo,
-          path: config.filePath,
+          path: filePath,
           content,
           sha,
-          token: config.githubToken,
           message: `✏️ Book edit: ${instruction || 'manual update'}`
         })
       });
@@ -150,32 +140,22 @@ export default function BookEditor() {
         </div>
       </div>
 
-      {/* Config Panel */}
       {showConfig && (
-        <div style={{ background: '#161616', borderBottom: '1px solid #2a2a2a', padding: '20px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          {[
-            { label: 'GitHub Token', key: 'githubToken', placeholder: 'ghp_...', type: 'password' },
-            { label: 'Claude API Key', key: 'claudeKey', placeholder: 'sk-ant-...', type: 'password' },
-            { label: 'Repositorio', key: 'repo', placeholder: 'usuario/mi-libro', type: 'text' },
-            { label: 'Ruta del archivo', key: 'filePath', placeholder: 'libro.md', type: 'text' },
-          ].map(({ label, key, placeholder, type }) => (
-            <div key={key}>
-              <div style={{ fontSize: 11, color: '#666', marginBottom: 4, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</div>
-              <input
-                type={type}
-                value={config[key]}
-                onChange={e => updateConfig(key, e.target.value)}
-                placeholder={placeholder}
-                style={{ width: '100%', background: '#1e1e1e', border: '1px solid #2a2a2a', color: '#e8e0d0', padding: '8px 10px', borderRadius: 4, fontSize: 13, boxSizing: 'border-box' }}
-              />
-            </div>
-          ))}
-          <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'flex-end' }}>
-            <button onClick={fetchFile} disabled={loading}
-              style={{ padding: '8px 20px', background: '#c8b89a', color: '#0f0f0f', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
-              Cargar archivo
-            </button>
+        <div style={{ background: '#161616', borderBottom: '1px solid #2a2a2a', padding: '20px 24px', display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: '#666', marginBottom: 4, letterSpacing: 1, textTransform: 'uppercase' }}>Ruta del archivo</div>
+            <input
+              type="text"
+              value={filePath}
+              onChange={e => setFilePath(e.target.value)}
+              placeholder="libro.md"
+              style={{ width: '100%', background: '#1e1e1e', border: '1px solid #2a2a2a', color: '#e8e0d0', padding: '8px 10px', borderRadius: 4, fontSize: 13, boxSizing: 'border-box' }}
+            />
           </div>
+          <button onClick={fetchFile} disabled={loading}
+            style={{ padding: '8px 20px', background: '#c8b89a', color: '#0f0f0f', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+            Cargar archivo
+          </button>
         </div>
       )}
 
@@ -193,10 +173,10 @@ export default function BookEditor() {
           {!content && !loading && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, color: '#444' }}>
               <div style={{ fontSize: 48 }}>📖</div>
-              <div style={{ fontSize: 14, letterSpacing: 1 }}>Configura GitHub y carga tu archivo</div>
-              <button onClick={() => setShowConfig(true)}
+              <div style={{ fontSize: 14, letterSpacing: 1 }}>Carga tu libro para empezar</div>
+              <button onClick={fetchFile}
                 style={{ padding: '10px 24px', background: '#c8b89a', color: '#0f0f0f', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-                Abrir configuración
+                Cargar libro.md
               </button>
             </div>
           )}
